@@ -4,7 +4,7 @@ import           Data.Array.Unboxed (UArray, amap, array, bounds, (!))
 -- import           Data.Array.Unboxed (UArray, amap, array, bounds, indices, ixmap, range, (!))
 -- import qualified Data.Array.Unboxed as A
 import           Data.List          (transpose)
-import           Data.Tuple.Extra   (swap)
+import           Data.Tuple.Extra   (fst3, snd3, swap, thd3)
 import           Matrices
 import           Tables
 import           Utils              (toTriplet)
@@ -69,5 +69,75 @@ getBasic r vol level ((v_i,v_j,v_k),v_t) = (information, p1, cases)
   p1 = map ((+1) . (*8)) [0 .. length r -1]
   cases = [v_t !! (i-1) | i <- r]
 
+edges_p1rep_1 :: [Int] -> [Int] -> ([Int],[Int])
+edges_p1rep_1 cases p1 =
+  (concat edges, concatMap (uncurry replicate) (zip counts p1))
+  where
+  edges = map head [edgesTable!!(i-1) | i <- cases]
+  counts = map length edges
+{-
+#       count <- sapply(edges, function(x) length(x)) # probablement qu'ici on n'a que des edges vecteurs
+#       edges <- cbind(unlist(edges), rep(p1, count))
+#                 # ce cbind est inutile, on resépare après
+-}
+
+getPoints :: [Int] -> [Int] -> [[Double]] -> [Double]
+getPoints edges p1 info = concat out
+  where
+  x1 = [edgePoints!!(i-1)!!1 | i <- edges]
+  x2 = [edgePoints!!(i-1)!!2 | i <- edges]
+  lambda = map (realToFrac . floor . (/9) . fromIntegral) x1
+  mu = map (\x -> 1-x) lambda
+  average w w' = zipWith (+) (zipWith (*) mu w) (zipWith (*) lambda w')
+  v1357 = [info!!(i-2) | i <- zipWith (+) p1 x1]
+  v2468 = [info!!(i-2) | i <- zipWith (+) p1 x2]
+  v35' = [info!!i | i <- p1]
+  v1  = map (!!0) v1357
+  v1' = [info!!(i-1)!!0 | i <- p1]
+  v2  = map (!!0) v2468
+  v2' = [info!!i!!0 | i <- p1]
+  v3  = map (!!1) v1357
+  v3' = map (!!1) v35'
+  v4  = map (!!1) v2468
+  v4' = [info!!(i+1)!!1 | i <- p1]
+  v5  = map (!!2) v1357
+  v5' = map (!!2) v35'
+  v6  = map (!!2) v2468
+  v6' = [info!!(i+4)!!2 | i <- p1]
+  v7  = map (!!3) v1357
+  v7' = lambda
+  v8  = map (!!3) v2468
+  v8' = map negate lambda
+  out = [ average v1 v1'
+        , average v2 v2'
+        , average v3 v3'
+        , average v4 v4'
+        , average v5 v5'
+        , average v6 v6'
+        , average v7 v7'
+        , average v8 v8'
+        ]
+
+{-
+  c((1 - floor(x1 / 9)) * info[p1 + x1 - 1, 1] + # v1
+      floor(x1 / 9) * info[p1, 1], # v1'
+    (1 - floor(x1 / 9)) * info[p1 + x2 - 1, 1] + # v2
+      floor(x1 / 9) * info[p1 + 1, 1], # v2'
+    (1 - floor(x1 / 9)) * info[p1 + x1 - 1, 2] + # v3
+      floor(x1 / 9) * info[p1 + 1, 2], # v3'
+    (1 - floor(x1 / 9)) * info[p1 + x2 - 1, 2] + # v4
+      floor(x1 / 9) * info[p1 + 2, 2], # v4'
+    (1 - floor(x1 / 9)) * info[p1 + x1 - 1, 3] + # v5
+      floor(x1 / 9) * info[p1 + 1, 3], # v5'
+    (1 - floor(x1 / 9)) * info[p1 + x2 - 1, 3] + # v6
+      floor(x1 / 9) * info[p1 + 5, 3], # v6'
+    (1 - floor(x1 / 9)) * info[p1 + x1 - 1, 4] + # v7
+      floor(x1 / 9) * (0 * info[p1 + 1, 3] + 1),
+    (1 - floor(x1/9)) * info[p1 + x2 - 1, 4] + # v8
+      floor(x1 / 9) * (0 * info[p1 + 1, 3] - 1))
+-}
+
 test_levCells = levCells v' 22 48
 test_getBasic = getBasic [1,2,3,4,5,6,7] v' 22 test_levCells
+test_edges_p1rep = edges_p1rep_1 (thd3 test_getBasic) (snd3 test_getBasic)
+test_getPoints = getPoints (fst test_edges_p1rep) (snd test_edges_p1rep) (fst3 test_getBasic)
