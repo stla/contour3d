@@ -4,7 +4,6 @@ version:             0.1.0.0
 -- description:
 homepage:            https://github.com/stla/contour3d#readme
 license:             GPL-3
-license-file:        LICENSE
 author:              Stéphane Laurent
 maintainer:          laurent_step@yahoo.fr
 copyright:           2018 Stéphane Laurent
@@ -18,8 +17,11 @@ library
   exposed-modules:     Lib
   build-depends:       base >= 4.7 && < 5
                      , array
+                     , extra
   default-language:    Haskell2010
   ghc-options:         -Wall
+  other-extensions:    FlexibleContexts
+                     , MultiParamTypeClasses
 
 source-repository head
   type:     git
