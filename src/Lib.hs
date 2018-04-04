@@ -3,7 +3,7 @@ module Lib
 import           Data.Array.Unboxed (UArray, amap, array, bounds, (!))
 -- import           Data.Array.Unboxed (UArray, amap, array, bounds, indices, ixmap, range, (!))
 -- import qualified Data.Array.Unboxed as A
-import           Data.List          (transpose)
+import           Data.List          (transpose, zipWith4)
 import           Data.Tuple.Extra   (fst3, snd3, swap, thd3)
 import           Matrices
 import           Tables
@@ -47,8 +47,8 @@ levCells a level maxvol = -- (concatMap (fst.f) [1 .. (nz-1)], concatMap (snd.f)
   v_k = map ((+1) . (`div` ((nx-1)*(ny-1)))) cells
 
 getBasic :: [Int] -> UArray (Int,Int,Int) Double -> Double -> (([Int],[Int],[Int]),[Int])
-         -> ([[Double]], [Int], [Int])
-getBasic r vol level ((v_i,v_j,v_k),v_t) = (information, p1, cases)
+         -> (([Double], [[Double]]), [Int], [Int])
+getBasic r vol level ((v_i,v_j,v_k),v_t) = ((values, information), p1, cases)
   where
   cube_1 = transpose [v_i,v_j,v_k]
   index :: [[Int]]
@@ -63,8 +63,8 @@ getBasic r vol level ((v_i,v_j,v_k),v_t) = (information, p1, cases)
   k1 = concat $ replicate (length v_i) index
   k2 = concatMap (replicate 8) cube_1
   cube_co = zipWith (zipWith (+)) k1 k2
-  value = map (subtract level) [vol ! toTriplet ijk | ijk <- cube_co] ++ [0]
-  information = transpose $ transpose (map (map fromIntegral) (cube_co ++ [[0,0,0]])) ++ [value]
+  values = map (subtract level) [vol ! toTriplet ijk | ijk <- cube_co] ++ [0]
+  information = transpose $ transpose (map (map fromIntegral) (cube_co ++ [[0,0,0]])) ++ [values]
   -- on verra si c'est bien de concaténer cube_co et value
   p1 = map ((+1) . (*8)) [0 .. length r -1]
   cases = [v_t !! (i-1) | i <- r]
@@ -117,24 +117,6 @@ getPoints edges p1 info = out -- correspond à matrix(info, ncol = 8) : CalPoint
         , average v7 v7'
         , average v8 v8'
         ]
-{-
-  c((1 - floor(x1 / 9)) * info[p1 + x1 - 1, 1] + # v1
-      floor(x1 / 9) * info[p1, 1], # v1'
-    (1 - floor(x1 / 9)) * info[p1 + x2 - 1, 1] + # v2
-      floor(x1 / 9) * info[p1 + 1, 1], # v2'
-    (1 - floor(x1 / 9)) * info[p1 + x1 - 1, 2] + # v3
-      floor(x1 / 9) * info[p1 + 1, 2], # v3'
-    (1 - floor(x1 / 9)) * info[p1 + x2 - 1, 2] + # v4
-      floor(x1 / 9) * info[p1 + 2, 2], # v4'
-    (1 - floor(x1 / 9)) * info[p1 + x1 - 1, 3] + # v5
-      floor(x1 / 9) * info[p1 + 1, 3], # v5'
-    (1 - floor(x1 / 9)) * info[p1 + x2 - 1, 3] + # v6
-      floor(x1 / 9) * info[p1 + 5, 3], # v6'
-    (1 - floor(x1 / 9)) * info[p1 + x1 - 1, 4] + # v7
-      floor(x1 / 9) * (0 * info[p1 + 1, 3] + 1),
-    (1 - floor(x1/9)) * info[p1 + x2 - 1, 4] + # v8
-      floor(x1 / 9) * (0 * info[p1 + 1, 3] - 1))
--}
 
 calPoint :: [[Double]] -> [[Double]]
 calPoint info = [scale (info!!0) (info!!1), scale (info!!2) (info!!3), scale (info!!4) (info!!5)]
@@ -142,9 +124,70 @@ calPoint info = [scale (info!!0) (info!!1), scale (info!!2) (info!!3), scale (in
   s = zipWith (/) (info!!6) (zipWith (-) (info!!6) (info!!7))
   scale u v = zipWith (+) u (zipWith (*) s (zipWith (-) v u))
 
--- preRender1 :: [[Int]] -> [Int] -> [[Double]] -> [[Double]]
+preRender1 :: [Int] -> [Int] -> [[Double]] -> [[Double]]
+preRender1 cases p1 information = transpose $ calPoint info
+  where
+  (edges, p1rep) = edges_p1rep_1 cases p1
+  info = getPoints edges p1rep information
 
+faceNo7 :: [Int] -> [Int] -> [Double] -> [Int]
+faceNo7 faces p1 values = map (\i -> if i==1 then 1 else 0) index
+  -- info n'intervient que par sa colonne 3, i.e. values
+  where
+  sign :: (Num a, Ord a) => a -> Int
+  sign x = if x>0 then 1 else -1
+  faces' = map abs faces
+  e  = [facePoints!!(i-1) | i <- faces']
+  e1 = map (!!1) e
+  e2 = map (!!2) e
+  e3 = map (!!3) e
+  e4 = map (!!4) e
+  a = [values!!(i-2) | i <- zipWith (+) p1 e1]
+  b = [values!!(i-2) | i <- zipWith (+) p1 e2]
+  c = [values!!(i-2) | i <- zipWith (+) p1 e3]
+  d = [values!!(i-2) | i <- zipWith (+) p1 e4]
+  abMINUScd = zipWith (-) (zipWith (*) a b) (zipWith (*) c d)
+  index = zipWith (*) (map sign faces) (map sign abMINUScd)
+
+face7 :: [Int] -> [Int] -> [Double] -> [Int]
+face7 faces p1 values = map (\i -> if i==1 then 1 else 0) index
+  where
+  a0 = [values!!(i-1) | i <- p1]
+  b0 = [values!!(i+2) | i <- p1]
+  c0 = [values!!(i+1) | i <- p1]
+  d0 = [values!!i | i <- p1]
+  a1 = [values!!(i+3) | i <- p1]
+  b1 = [values!!(i+6) | i <- p1]
+  c1 = [values!!(i+5) | i <- p1]
+  d1 = [values!!(i+4) | i <- p1]
+  a1a0 = zipWith (-) a1 a0
+  b1b0 = zipWith (-) b1 b0
+  c1c0 = zipWith (-) c1 c0
+  d1d0 = zipWith (-) d1 d0
+  a = zipWith (-) (zipWith (*) a1a0 c1c0) (zipWith (*) b1b0 d1d0)
+  c = zipWith (-) (zipWith (*) a0 c0) (zipWith (*) b0 d0)
+  b' =  zipWith (-) (zipWith (*) a1a0 c0) (zipWith (*) c1c0 a0)
+  b'' = zipWith (-) (zipWith (*) b1b0 d0) (zipWith (*) d1d0 b0)
+  b = zipWith (-) b' b''
+  tmax = zipWith (/) b (map (*(-2)) a)
+  tmax2 = zipWith (*) tmax tmax
+  maxi = zipWith (+) (zipWith (+) (zipWith (*) a tmax2) (zipWith (*) b tmax)) c
+  maxim = map (\x -> if isNaN x then -1 else x) maxi
+{-  cond1 = map (\x -> if x<0 then 1 else 0) a
+  cond2 = map (\x -> if x>0 then 1 else 0) tmax
+  cond3 = map (\x -> if x<1 then 1 else 0) tmax
+  cond4 = map (\x -> if x>0 then 1 else 0) maxim -}
+  cond1 = map (<0) a
+  cond2 = map (>0) tmax
+  cond3 = map (<1) tmax
+  cond4 = map (>0) maxim
+  totalcond = zipWith4 (\s t u v -> and [s,t,u,v]) cond1 cond2 cond3 cond4
+  index = zipWith (*) (map (\x -> if x>0 then 1 else -1) faces)
+                      (map (\x -> if x then 1 else -1) totalcond)
+
+getInfo = snd . fst3
 test_levCells = levCells v' 22 48
 test_getBasic = getBasic [1,2,3,4,5,6,7] v' 22 test_levCells
 test_edges_p1rep = edges_p1rep_1 (thd3 test_getBasic) (snd3 test_getBasic)
-test_getPoints = getPoints (fst test_edges_p1rep) (snd test_edges_p1rep) (fst3 test_getBasic)
+test_getPoints = getPoints (fst test_edges_p1rep) (snd test_edges_p1rep) (getInfo test_getBasic)
+test_preRender1 = preRender1 (thd3 test_getBasic) (snd3 test_getBasic) (getInfo test_getBasic)
