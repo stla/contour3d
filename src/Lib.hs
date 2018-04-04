@@ -1,20 +1,15 @@
 module Lib
   where
-import           Data.Array.Unboxed (UArray, amap, array, bounds, (!))
+import           Data.Array.Unboxed (UArray, amap, array, bounds, elems, (!))
 -- import           Data.Array.Unboxed (UArray, amap, array, bounds, indices, ixmap, range, (!))
 -- import qualified Data.Array.Unboxed as A
-import           Data.List          (transpose, zipWith4)
+import           Data.List          (findIndices, transpose, zipWith4)
+import           Data.Maybe         (fromMaybe)
 import           Data.Tuple.Extra   (fst3, snd3, swap, thd3)
 import           Matrices
 import           Tables
 import           Utils              (toTriplet)
 
-v' :: UArray (Int,Int,Int) Double
-v' = array ((1,1,1),(3,3,3))
-            [((i,j,k), x*x+y*y+z*z) | i <- [1..3], j <- [1..3], k <- [1..3],
-                                      let x = 1 + fromIntegral i,
-                                      let y = 1 + fromIntegral j,
-                                      let z = 1 + fromIntegral k]
 
 
 faceType :: UArray (Int,Int) Double -> Int -> Int -> Double -> Double -> UArray (Int,Int) Int
@@ -130,6 +125,15 @@ preRender1 cases p1 information = transpose $ calPoint info
   (edges, p1rep) = edges_p1rep_1 cases p1
   info = getPoints edges p1rep information
 
+getTriangles1 :: [Int] -> UArray (Int,Int,Int) Double -> Double
+              -> (([Int],[Int],[Int]),[Int]) -> [[Double]]
+getTriangles1 r vol level v = preRender1 cases p1 information
+  where
+  basics = getBasic r vol level v
+  information = (snd . fst3) basics
+  p1 = snd3 basics
+  cases = thd3 basics
+
 faceNo7 :: [Int] -> [Int] -> [Double] -> [Int]
 faceNo7 faces p1 values = map (\i -> if i==1 then 1 else 0) index
   -- info n'intervient que par sa colonne 3, i.e. values
@@ -185,9 +189,70 @@ face7 faces p1 values = map (\i -> if i==1 then 1 else 0) index
   index = zipWith (*) (map (\x -> if x>0 then 1 else -1) faces)
                       (map (\x -> if x then 1 else -1) totalcond)
 
+{- getTriangles_i :: [Int] -> UArray (Int,Int,Int) Double -> Double
+               -> (([Int],[Int],[Int]),[Int]) -> [[Double]]
+getTriangles_i r vol level v =
+  triangles
+  where
+  basics = getBasic r vol level v
+  information = (snd . fst3) basics
+  p1 = snd3 basics
+  cases = thd3 basics
+  nface = special_nface !! i
+  nedge = special_nedge !! i
+ -- faces <- matrix(unlist(Faces[cases]), ncol = nface, byrow = TRUE) -}
+
+
+computeContour3d :: UArray (Int,Int,Int) Double -> Maybe Double -> Double
+                 -> Maybe [Int] -> Maybe [Int] -> Maybe [Int]
+                 -> [[Double]]
+computeContour3d vol maxvol' level x' y' z' =
+  triangles
+  where
+  maxvol = fromMaybe (maximum (elems vol)) maxvol'
+  ((_,_,_),(nx,ny,nz)) = bounds vol
+  x = fromMaybe [1 .. nx] x'
+  y = fromMaybe [1 .. nx] y'
+  z = fromMaybe [1 .. nx] z'
+  v = levCells vol level maxvol
+  tcase = map (subtract 1) [caseRotationFlip!!i!!0 | i <- snd v]
+  r = map (+1) $ findIndices (`elem` [1, 2, 5, 8, 9, 11, 14]) tcase
+  triangles = if not $ null r then getTriangles1 r vol level v else [[]]
+
+-- ~~ TESTS ~~ --
+v' :: UArray (Int,Int,Int) Double
+v' = array ((1,1,1),(3,3,3))
+            [((i,j,k), x*x+y*y+z*z) | i <- [1..3], j <- [1..3], k <- [1..3],
+                                      let x = 1 + fromIntegral i,
+                                      let y = 1 + fromIntegral j,
+                                      let z = 1 + fromIntegral k]
 getInfo = snd . fst3
 test_levCells = levCells v' 22 48
 test_getBasic = getBasic [1,2,3,4,5,6,7] v' 22 test_levCells
 test_edges_p1rep = edges_p1rep_1 (thd3 test_getBasic) (snd3 test_getBasic)
 test_getPoints = getPoints (fst test_edges_p1rep) (snd test_edges_p1rep) (getInfo test_getBasic)
 test_preRender1 = preRender1 (thd3 test_getBasic) (snd3 test_getBasic) (getInfo test_getBasic)
+
+fun2array :: (Double,Double) -> (Double -> Double -> Double -> Double) -> UArray (Int,Int,Int) Double
+fun2array (a,b) f =
+    array ((1,1,1),(n,n,n))
+            [((i,j,k), f x y z) | i <- [1..n], j <- [1..n], k <- [1..n],
+                                      let x = s i,
+                                      let y = s j,
+                                      let z = s k]
+    where
+        n = 100
+        s l = a + (b-a) * fromIntegral (l-1) / fromIntegral (n-1)
+
+mytestf :: Double -> Double -> Double -> Double
+mytestf x y z =
+    ((x2 + y2 - 1)**2 + z2) * ((y2 + z2 - 1)**2 + x2) *
+        ((z2 + x2 - 1)**2 + y2) - a**2*(1 + b*(x2 + y2 + z2))
+    where
+    a = 0.075
+    b = 3
+    x2 = x*x
+    y2 = y*y
+    z2 = z*z
+
+tris = computeContour3d (fun2array (-1.6,1.6) mytestf) Nothing 0 Nothing Nothing Nothing
