@@ -17,6 +17,7 @@ library
   exposed-modules:     Lib
                      , Utils
                      , Matrices
+                     , Tables
   build-depends:       base >= 4.7 && < 5
                      , array
                      , extra
