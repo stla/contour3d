@@ -81,8 +81,8 @@ edges_p1rep_1 cases p1 =
 #                 # ce cbind est inutile, on resépare après
 -}
 
-getPoints :: [Int] -> [Int] -> [[Double]] -> [Double]
-getPoints edges p1 info = concat out
+getPoints :: [Int] -> [Int] -> [[Double]] -> [[Double]]
+getPoints edges p1 info = out -- correspond à matrix(info, ncol = 8) : CalPoint appliqué là-dessus
   where
   x1 = [edgePoints!!(i-1)!!1 | i <- edges]
   x2 = [edgePoints!!(i-1)!!2 | i <- edges]
@@ -117,7 +117,6 @@ getPoints edges p1 info = concat out
         , average v7 v7'
         , average v8 v8'
         ]
-
 {-
   c((1 - floor(x1 / 9)) * info[p1 + x1 - 1, 1] + # v1
       floor(x1 / 9) * info[p1, 1], # v1'
@@ -136,6 +135,14 @@ getPoints edges p1 info = concat out
     (1 - floor(x1/9)) * info[p1 + x2 - 1, 4] + # v8
       floor(x1 / 9) * (0 * info[p1 + 1, 3] - 1))
 -}
+
+calPoint :: [[Double]] -> [[Double]]
+calPoint info = [scale (info!!0) (info!!1), scale (info!!2) (info!!3), scale (info!!4) (info!!5)]
+  where
+  s = zipWith (/) (info!!6) (zipWith (-) (info!!6) (info!!7))
+  scale u v = zipWith (+) u (zipWith (*) s (zipWith (-) v u))
+
+-- preRender1 :: [[Int]] -> [Int] -> [[Double]] -> [[Double]]
 
 test_levCells = levCells v' 22 48
 test_getBasic = getBasic [1,2,3,4,5,6,7] v' 22 test_levCells
